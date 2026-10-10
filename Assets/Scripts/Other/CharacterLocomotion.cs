@@ -1,0 +1,189 @@
+using System;
+using UnityEngine;
+using Unity.Netcode;
+
+public class CharacterLocomotion : NetworkBehaviour
+{
+    Vector2 input;
+    Animator animator;
+
+    Vector3 rootMotion;
+    CharacterController cc;
+
+    [SerializeField] private float jumpHeight;
+    [SerializeField] private float gravity;
+    [SerializeField] private float stepDown;
+    [SerializeField] private float airControl;
+    [SerializeField] private float jumpDampning;
+    [SerializeField] private float groundSpeed;
+    [SerializeField] private float pushPower = 2f;
+
+    bool isJumping;
+    Vector3 velocity;
+    int isSprintingParam = Animator.StringToHash("isSprinting");
+    private CharacterAiming characterAiming;
+    public bool isSprinting;
+    private bool isEnabled = true;
+    public GameHandler gameHandler;
+
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+        enabled = IsClient;
+        if (!IsOwner)
+        {
+            enabled = false;
+            return;
+        }
+        cc = GetComponent<CharacterController>();
+    }
+
+
+    private void Start()
+    {
+        animator = GetComponent<Animator>();
+        
+
+        characterAiming = GetComponent<CharacterAiming>();
+
+    }
+
+    public void SetMovementEnabled(bool enabled)
+    {
+        if (cc != null)
+        {
+            cc.enabled = enabled;
+
+        }
+    }
+
+    private void Update()
+    {
+        if (!IsOwner) return;
+        input.x = Input.GetAxis("Horizontal");
+        input.y = Input.GetAxis("Vertical");
+
+        animator.SetFloat("InputX", input.x);
+        animator.SetFloat("InputY", input.y);
+
+
+
+        UpdateIsSprinting();
+
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            Jump();
+        }
+
+        
+    }
+
+    private void UpdateIsSprinting()
+    {
+        if (characterAiming.isAiming == false)
+        {
+            isSprinting = Input.GetKey(KeyCode.LeftShift);
+            animator.SetBool(isSprintingParam, isSprinting);
+        }
+    }
+
+    private void OnAnimatorMove()
+    {
+        rootMotion += animator.deltaPosition;
+    }
+
+    private void FixedUpdate()
+    {
+        if (isJumping)  //IsInAir State
+        {
+            UpdateInAir();
+
+        }
+        else       //IsGroundedState
+        {
+            UpdateOnGround();
+
+        }
+    }
+
+    private void UpdateOnGround()
+    {
+        Vector3 stepForwardAmount = rootMotion * groundSpeed;
+        Vector3 stepDownAmount = Vector3.down * stepDown;
+
+        if (cc.enabled)
+        {
+            cc.Move(stepForwardAmount + stepDownAmount);
+
+        }
+        rootMotion = Vector3.zero;
+
+        if (!cc.isGrounded) //Slips of edge and is now jumping
+        {
+            SetInAir(0);
+        }
+    }
+
+    private void UpdateInAir()
+    {
+        velocity.y -= gravity * Time.fixedDeltaTime;
+        Vector3 displacement = velocity * Time.fixedDeltaTime;
+        displacement += CalculateAirControl();
+
+        if (cc.enabled)
+        {
+            cc.Move(displacement);
+
+        }
+        isJumping = !cc.isGrounded;
+        rootMotion = Vector3.zero;
+        animator.SetBool("isJumping", isJumping);
+
+    }
+
+    private void Jump()
+    {
+        if (!isJumping)
+        {
+            float jumpVelocity = Mathf.Sqrt(2 * gravity * jumpHeight);
+            SetInAir(jumpVelocity);
+
+        }
+    }
+
+    private void SetInAir(float jumpVelocity)
+    {
+        isJumping = true;
+        velocity = animator.velocity * jumpDampning * groundSpeed;
+        velocity.y = jumpVelocity;
+        animator.SetBool("isJumping", true);
+    }
+
+    Vector3 CalculateAirControl()
+    {
+        return ((transform.forward * input.y) + (transform.right * input.x)) * (airControl / 100);
+    }
+
+    void OnControllerColliderHit(ControllerColliderHit hit)
+    {
+        Rigidbody body = hit.collider.attachedRigidbody;
+
+        // no rigidbody
+        if (body == null || body.isKinematic)
+            return;
+
+        // We dont want to push objects below us
+        if (hit.moveDirection.y < -0.3f)
+            return;
+
+        // Calculate push direction from move direction,
+        // we only push objects to the sides never up and down
+        Vector3 pushDir = new Vector3(hit.moveDirection.x, 0, hit.moveDirection.z);
+
+        // If you know how fast your character is trying to move,
+        // then you can also multiply the push velocity by that.
+
+        // Apply the push
+        body.linearVelocity = pushDir * pushPower;
+    }
+}

@@ -1,0 +1,18 @@
+﻿# Ignore everything by default
+/*
+
+# Allow only these
+!/.gitignore
+!/README.md
+
+!/Assets/
+/Assets/*
+!/Assets/Scripts/
+!/Assets/Scripts.meta
+!/Assets/DefaultNoise.asset*
+!/Assets/DefaultTerrain.asset*
+!/Assets/NoiseSettings1.asset*
+
+!/Packages/
+/Packages/*
+!/Packages/manifest.json
